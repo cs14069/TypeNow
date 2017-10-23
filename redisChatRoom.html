@@ -1,0 +1,206 @@
+<link href='/main.css' rel='stylesheet'>
+<meta charset='utf-8'>
+</head>
+<body class='room'>
+  <header>
+    <a href='/' class='top-link'>TypeNow.xyz</a>
+    <div id='chatMenuBtn' class='chat-menu-btn-div'>MENU<span></span><span></span><span></span></div>
+    <h1 id='roomTitle'></h1>
+    <div id='chatMenu' class='chat-menu'>
+      <form id='newUserNameForm' accept-charset='jis'>
+        <label for='newUserName'>ユーザ名の変更</label>
+        <input name='newUserName' type='text' id='newUserNameInput'>
+        <button id='submitNewUserNameBtn' type='submit'>変更</button>
+      </form>
+    </div>
+  </header>
+
+  <div id='chatDiv' class='chat-div'>
+    <p id='chatDivBottom' class='hidden'></p>
+  </div>
+  <div class='google-adsense'>
+    <p>広告</p>
+    <script async src="//pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+    <!-- typenow.xyz -->
+    <ins class="adsbygoogle"
+    style="display:inline-block;width:728px;height:90px"
+    data-ad-client="ca-pub-4360677629222666"
+    data-ad-slot="4673500890"></ins>
+    <script>
+      (adsbygoogle = window.adsbygoogle || []).push({});
+    </script>
+  </div>
+  <form id='msgForm' class='msg-form'>
+    <input id='msgInput' type="text" placeholder='メッセージを入力 (100文字)' pattern='.[,100]' autocomplete='off' maxlength='100' autofocus='true'>
+    <button id='submitMsgBtn' type='submit'>送信</button>
+  </form>  
+
+
+  <div class='footer'>
+    <p>Copyright © 2017 TYPENOW.xyz All Rights Reserved.</p>
+  </div>
+  <script type='text/javascript'>
+    let bodyHeight = Math.max.apply( null, [document.body.clientHeight , document.body.scrollHeight, document.documentElement.scrollHeight, document.documentElement.clientHeight] );
+    let chatDivBottom = document.getElementById('chatDivBottom');
+    let bottomElement = chatDivBottom;
+    let newUserNameInput = document.getElementById('newUserNameInput');
+    let typingUser = [];
+    let lastMessage = '';
+    let userName = '';
+
+    // message title username
+    document.getElementById('roomTitle').innerHTML = '[ ' + roomName + ' ]';
+    let chatDiv = document.getElementById('chatDiv');
+    chatDiv.style.maxHeight = bodyHeight*0.40;
+    let cookie = document.cookie.split('; ');
+    cookie.forEach(function (c) {
+      let kv = c.split('=');
+      if(kv[0] === 'un') {
+        userName = decodeURIComponent(kv[1]);
+        newUserNameInput.value = userName;
+      }
+    });
+
+    // menu
+    let chatMenu = document.getElementById('chatMenu');
+    let chatMenuBtn = document.getElementById('chatMenuBtn');
+    // websocket
+    let ws = new WebSocket("ws://typenow.xyz:8081" + window.location.pathname);
+    let sent = [];
+    ws.onopen = function() {
+      console.log("websocket open!");
+
+      document.getElementById('newUserNameForm').onsubmit = sendNewUserName;
+      document.getElementById('submitNewUserNameBtn').onclick = sendNewUserName;
+      function sendNewUserName() {
+        ws.send(JSON.stringify({nun: newUserNameInput.value}));
+        return false;
+      }
+
+      chatMenuBtn.onclick = toggleMenu;
+      function toggleMenu() {
+        if(chatMenu.classList.contains('active')) {
+          chatMenu.classList.remove('active');
+        } else {
+          chatMenu.classList.add('active');
+        }
+        if(chatMenuBtn.classList.contains('active')) {
+          chatMenuBtn.classList.remove('active');
+        } else {
+          chatMenuBtn.classList.add('active');
+        }
+        return false;
+      }
+
+    }
+
+    ws.onmessage = function(packet) {
+      let json = JSON.parse(packet.data);
+      console.log('受信: ' + packet.data);
+      if(json.yn !== undefined) {
+        if(json.yn === userName) {
+          alert(json.msg);
+          newUserNameInput.value = userName;
+          return ;
+        }
+        let date = new Date();
+        date = new Date();
+        date.setTime(date.getTime() + 7776000000);
+        let utc_date = date.toUTCString();
+        document.cookie = 'un='+encodeURIComponent(json.yn)+';expires='+utc_date+';max-age=77760000';
+        userName = json.yn;
+        newUserNameInput.value = userName;
+      } else {
+        if(json.typing !== undefined && json.typing === '') {
+          // 入力中の文字が全て削除された場合
+          removeMessage(json);
+        } else {
+          addMessage(json);                          
+        }
+      }
+    }
+
+    ws.onclose = function(e) {
+      alert("Websocket Close Code = " + e.code);
+      window.location.href = window.location.pathname;
+      // alert("Close Reason = " + e.reason);
+      // window.location.href = '/?error';
+    }
+
+    // input form
+    let mi = document.getElementById('msgInput');
+    mi.onkeyup = function() {
+      if(mi.value === lastMessage || mi.value > 30) { return false; }
+      let msg = JSON.stringify({typing: mi.value});
+      ws.send(msg);
+      lastMessage = mi.value;
+    }
+    function sendMessage() {
+      ws.send(JSON.stringify({msg: mi.value}));
+      mi.value = '';
+      return false;
+    }
+    document.getElementById('submitMsgBtn').onclick = sendMessage;
+    msgForm.onsubmit = sendMessage;
+
+    function addMessage(json) {
+      if(json.msg !== undefined) {  
+        if(typingUser[json.un] !== undefined) {
+          removeMessage(json);
+        }
+        let p = document.createElement('p');
+        p.classList.add('msg-line');
+        p.id = json.un + json.index;
+        if(json.cmd !== undefined) {
+          // コマンドがある場合（[参加]などの特殊メッセージ）
+          if(json.cmd === 'join') {
+            p.classList.add('msg-sp1');
+            p.innerHTML = json.un + ':' +json.msg;    
+          }else if(json.cmd === 'leave') {
+            p.classList.add('msg-sp1');
+            p.innerHTML = json.un + ':' +json.msg;             
+          }else if(json.cmd === 'nun') {
+            p.classList.add('msg-sp1');
+            p.innerHTML = json.un1 + '→' +json.un2+json.msg;             
+          }
+        } else {
+          p.innerHTML = '<span class="msg-index">' + json.index + '</span>. [' + json.un + ']：<span class="msg-content">' + json.msg + '</span>';      
+        }
+        chatDiv.insertBefore(p, chatDivBottom);
+        document.getElementById(json.un + json.index).setAttribute('title', unixtmieToDate(json.datetime));
+      }else if(json.typing !== undefined) {
+        if(typingUser[json.un] === undefined) {
+        // 初めての入力中
+        let p = document.createElement('p');
+        p.classList.add('msg-line');
+        p.innerHTML = '<span class="msg-index">[入力中]</span>. [' + json.un + ']：<span class="msg-content">' + json.typing + '</span>';
+        typingUser[json.un] = p;
+        bottomElement = p;
+        chatDiv.insertBefore(p, chatDivBottom);
+      } else {
+        // 入力中続き
+        typingUser[json.un].innerHTML = '<span class="msg-index">[入力中]</span> [' + json.un + ']：<span class="msg-content">' + json.typing + '</span>';
+      }
+    } else {
+      alert('不明なデータを受信:' + JSON.stringify(json));
+    }
+    if(chatDiv.scrollTop + 1000 >= chatDiv.scrollHeight) {
+      chatDiv.scrollTop = Number.MAX_SAFE_INTEGER;
+    }
+  }
+  document.body.scrollTop = 0;
+  function removeMessage(json) {
+    if(typingUser[json.un] !== undefined) {
+      bottomElement = typingUser[json.un].nextElementSibling;
+      chatDiv.removeChild(typingUser[json.un]);
+      delete typingUser[json.un];      
+    }
+  }
+
+  function unixtmieToDate(ux) {
+    let d = new Date(ux);
+    return '' + (d.getMonth() + 1) + '/' + d.getDate() + ' ' + (( d.getHours()   < 10 ) ? '0' + d.getHours()   : d.getHours()) + ':' + (( d.getMinutes() < 10 ) ? '0' + d.getMinutes() : d.getMinutes()) + ':' + (( d.getSeconds() < 10 ) ? '0' + d.getSeconds() : d.getSeconds());
+  }
+</script>
+</body>
+</html>
